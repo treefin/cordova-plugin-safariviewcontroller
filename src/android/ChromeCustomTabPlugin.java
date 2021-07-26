@@ -116,10 +116,10 @@ public class ChromeCustomTabPlugin extends CordovaPlugin{
                 return true;
             }
             case "connectToService": {
-                if (bindCustomTabsService())
-                    callbackContext.sendPluginResult(new PluginResult(PluginResult.Status.OK, true));
-                else
-                    callbackContext.sendPluginResult(new PluginResult(PluginResult.Status.ERROR, "Failed to connect to service"));
+                bindCustomTabsService(
+                    () -> callbackContext.sendPluginResult(new PluginResult(PluginResult.Status.OK, true)),
+                    () -> callbackContext.sendPluginResult(new PluginResult(PluginResult.Status.ERROR, "Failed to connect to service"))
+                );
                 return true;
             }
             case "warmUp": {
@@ -219,8 +219,32 @@ public class ChromeCustomTabPlugin extends CordovaPlugin{
         return mCustomTabPluginHelper.getSession();
     }
 
-    private boolean bindCustomTabsService() {
-        return mCustomTabPluginHelper.bindCustomTabsService(cordova.getActivity());
+    @FunctionalInterface
+    private interface Thunk {
+        void execute();
+    }
+
+    private void bindCustomTabsService(
+        Thunk successCb,
+        Thunk failureCb
+    ) {
+        if (mCustomTabPluginHelper.getClient() == null) {
+            mCustomTabPluginHelper.setConnectionCallback(new CustomTabServiceHelper.ConnectionCallback() {
+                @Override
+                public void onCustomTabsConnected() {
+                    successCb.execute();
+                }
+
+                @Override
+                public void onCustomTabsDisconnected() {
+                }
+            });
+            if (!mCustomTabPluginHelper.bindCustomTabsService(cordova.getActivity())) {
+                failureCb.execute();
+            }
+        } else {
+            successCb.execute();
+        }
     }
 
     private boolean unbindCustomTabsService() {
@@ -258,8 +282,8 @@ public class ChromeCustomTabPlugin extends CordovaPlugin{
 
     @Override
     public void onStart() {
-        if(wasConnected){
-            bindCustomTabsService();
+        if (wasConnected) {
+            bindCustomTabsService(() -> {}, () -> {});
         }
         super.onStart();
     }
